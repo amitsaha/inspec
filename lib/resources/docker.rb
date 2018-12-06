@@ -90,6 +90,7 @@ module Inspec::Resources
   class Docker < Inspec.resource(1)
     name 'docker'
     supports platform: 'unix'
+    supports platform: 'windows'
     desc "
       A resource to retrieve information about docker
     "
@@ -184,7 +185,11 @@ module Inspec::Resources
 
     def parse_json_command(labels, subcommand)
       # build command
-      format = labels.map { |label| "\"#{label}\": {{json .#{label}}}" }
+      if inspec.os.windows?
+        format = labels.map { |label| "\\\"#{label}\\\": {{json .#{label}}}" }
+      else
+        format = labels.map { |label| "\"#{label}\": {{json .#{label}}}" }
+      end
       raw = inspec.command("docker #{subcommand} --format '{#{format.join(', ')}}'").stdout
       output = []
       # since docker is not outputting valid json, we need to parse each row
