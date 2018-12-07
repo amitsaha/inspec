@@ -170,7 +170,8 @@ module Inspec::Resources
     # returns information about docker objects
     def object(id)
       return @inspect if defined?(@inspect)
-      data = JSON.parse(inspec.command("docker inspect #{id}").stdout)
+      cmd = inspec.command("docker inspect #{id}")
+      data = JSON.parse(cmd.stdout) if cmd.exit_status == 0
       data = data[0] if data.is_a?(Array)
       @inspect = Hashie::Mash.new(data)
     rescue JSON::ParserError => _e
@@ -243,7 +244,12 @@ module Inspec::Resources
 
     def parse_images
       # docker does not support the `json .` function here, therefore we need to emulate that behavior.
-      raw_images = inspec.command('docker images -a --no-trunc --format \'{ "id": {{json .ID}}, "repository": {{json .Repository}}, "tag": {{json .Tag}}, "size": {{json .Size}}, "digest": {{json .Digest}}, "createdat": {{json .CreatedAt}}, "createdsize": {{json .CreatedSince}} }\'').stdout
+      if inspec.os.windows?
+        format = '{ \"id\": {{json .ID}}, \"repository\": {{json .Repository}}, \"tag\": {{json .Tag}}, \"size\": {{json .Size}}, \"digest\": {{json .Digest}}, \"createdat\": {{json .CreatedAt}}, \"createdsize\": {{json .CreatedSince}} }'
+      else
+        format = '{ "id": {{json .ID}}, "repository": {{json .Repository}}, "tag": {{json .Tag}}, "size": {{json .Size}}, "digest": {{json .Digest}}, "createdat": {{json .CreatedAt}}, "createdsize": {{json .CreatedSince}} }'
+      end
+      raw_images = inspec.command("docker images -a --no-trunc --format '#{format}'").stdout
       c_images = []
       raw_images.each_line { |entry|
         c_images.push(JSON.parse(entry))
@@ -255,8 +261,15 @@ module Inspec::Resources
     end
 
     def parse_plugins
-      plugins = inspec.command('docker plugin ls --format \'{"id": {{json .ID}}, "name": "{{ with split .Name ":"}}{{index . 0}}{{end}}", "version": "{{ with split .Name ":"}}{{index . 1}}{{end}}", "enabled": {{json .Enabled}} }\'').stdout
+      # Plugins not supported on Windows yet
+      if inspec.os.windows?
+        return nil
+        # format = '{\"id\": {{json .ID}}, \"name\": "{{ with split .Name ":"}}{{index . 0}}{{end}}", \"version\": "{{ with split .Name ":"}}{{index . 1}}{{end}}", \"enabled\": {{json .Enabled}} }'
+      else
+        format = '{"id": {{json .ID}}, "name": "{{ with split .Name ":"}}{{index . 0}}{{end}}", "version": "{{ with split .Name ":"}}{{index . 1}}{{end}}", "enabled": {{json .Enabled}} }'
+      end
       c_plugins = []
+      plugins = inspec.command("docker plugin ls --format '#{format}'").stdout
       plugins.each_line { |entry|
         c_plugins.push(JSON.parse(entry))
       }
